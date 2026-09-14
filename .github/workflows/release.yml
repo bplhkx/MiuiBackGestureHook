@@ -1,0 +1,187 @@
+name: Build and release APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (use "auto" to derive from versionName)
+        required: false
+        default: auto
+      prerelease:
+        description: Mark GitHub release as prerelease
+        type: boolean
+        required: false
+        default: false
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "**.md"
+      - "patches/**"
+      - ".github/workflows/sync-upstream.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: microsoft
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android packages
+        run: |
+          sdkmanager --install \
+            "platform-tools" \
+            "platforms;android-37.0" \
+            "build-tools;37.0.0" \
+            "ndk;30.0.16138531" \
+            "ndk;26.2.11394342" \
+            "cmake;4.1.2" \
+            "cmake;3.22.1"
+          yes | sdkmanager --licenses || true
+
+      - name: Build LSPlt standalone AAR
+        run: |
+          chmod +x scripts/ci/build-lsplt.sh
+          export ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          ./scripts/ci/build-lsplt.sh
+
+      - name: Prepare signing keystore
+        env:
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          ALIAS: ${{ secrets.ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          chmod +x scripts/ci/prepare-keystore.sh
+          ./scripts/ci/prepare-keystore.sh "$RUNNER_TEMP/release-keystore"
+
+      - name: Write local.properties
+        run: |
+          echo "sdk.dir=${ANDROID_HOME:-$HOME/Android/Sdk}" > local.properties
+
+      - name: Build release APK
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          if [[ -n "${SIGNING_KEY:-}" && -f "${SIGNING_KEY}" && -n "${KEYSTORE_PASSWORD:-}" ]]; then
+            echo "Using env-based signing with provided keystore"
+            export KEYSTORE_PASSWORD="${KEYSTORE_PASSWORD}"
+            export ALIAS="${ALIAS}"
+            export KEY_PASSWORD="${KEY_PASSWORD}"
+          elif [[ -n "${KEYSTORE_PROPERTIES:-}" && -f "${KEYSTORE_PROPERTIES}" ]]; then
+            echo "Using keystore.properties"
+            cp "${KEYSTORE_PROPERTIES}" keystore.properties
+          else
+            echo "::error::No signing material available"
+            exit 1
+          fi
+          ./gradlew :app:assembleRelease --no-daemon
+
+      - name: Locate and align APK
+        id: apk
+        run: |
+          set -euo pipefail
+          APK="$(find app/build/outputs/apk/release -name '*.apk' ! -name '*-unsigned.apk' ! -name '*aligned.apk' | head -n1)"
+          if [[ -z "$APK" ]]; then
+            APK="$(find app/build/outputs/apk/release -name '*-unsigned.apk' | head -n1)"
+          fi
+          test -n "$APK"
+          echo "raw_apk=$APK" >> "$GITHUB_OUTPUT"
+          OUT="app/build/outputs/apk/release/MiuiBackGestureHook-feature-switches.apk"
+          if command -v zipalign >/dev/null 2>&1; then
+            zipalign -f -p 4 "$APK" "$OUT"
+          else
+            cp "$APK" "$OUT"
+          fi
+          echo "apk=$OUT" >> "$GITHUB_OUTPUT"
+          ls -lh "$OUT"
+
+      - name: Resolve release tag
+        id: tag
+        run: |
+          set -euo pipefail
+          REQUESTED="${{ github.event.inputs.tag || 'auto' }}"
+          VERSION="$(python3 - <<'PY'
+          import re
+          text = open("app/build.gradle.kts", encoding="utf-8").read()
+          m = re.search(r'versionName\s*=\s*"([^"]+)"', text)
+          print(m.group(1) if m else "0.0.0")
+          PY
+          )"
+          COUNT="$(git rev-list --count HEAD)"
+          if [[ "$REQUESTED" == "auto" || -z "$REQUESTED" ]]; then
+            TAG="v${VERSION}+r${COUNT}"
+          else
+            TAG="$REQUESTED"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "revision=${COUNT}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.tag.outputs.tag }}"
+          VERSION="${{ steps.tag.outputs.version }}"
+          REVISION="${{ steps.tag.outputs.revision }}"
+          APK="${{ steps.apk.outputs.apk }}"
+          PRERELEASE_FLAG=""
+          if [[ "${{ github.event.inputs.prerelease || 'false' }}" == "true" ]]; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
+
+          NOTES_FILE="$RUNNER_TEMP/release-notes.md"
+          cat > "$NOTES_FILE" <<EOF
+          ## MiuiBackGestureHook (feature switches)
+
+          - Base: upstream @ $(git rev-parse --short HEAD)
+          - versionName: ${VERSION}
+          - revision: ${REVISION}
+          - Local feature: independent AOSP predictive-back restoration switch
+            - Google Circle to Search can be enabled without the AOSP path
+            - HyperOS extras require the AOSP switch
+
+          ### APK
+          \`${APK##*/}\`
+
+          > Built by GitHub Actions from this fork.
+          EOF
+
+          if gh release view "$TAG" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$APK" --repo "${GITHUB_REPOSITORY}" --clobber
+          else
+            gh release create "$TAG" "$APK" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "MiuiBackGestureHook ${TAG}" \
+              --notes-file "$NOTES_FILE" \
+              $PRERELEASE_FLAG
+          fi
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MiuiBackGestureHook-release-apk
+          path: app/build/outputs/apk/release/MiuiBackGestureHook-feature-switches.apk
+          if-no-files-found: error
