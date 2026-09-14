@@ -87,6 +87,8 @@ public abstract class SystemUiHookRuntime extends SystemUiInputRuntime {
                         return;
                     }
                     if (!isAospBackGestureRestorationEnabled()) {
+                        // Receiver must stay registered so CTS trigger haptic keeps working.
+                        ensureMiuiOverviewStateReceiver(context);
                         detachAllBackInputMonitorsForDisabledAospRestoration(context);
                         return;
                     }
@@ -7225,6 +7227,8 @@ public abstract class SystemUiHookRuntime extends SystemUiInputRuntime {
             return;
         }
         if (!isAospBackGestureRestorationEnabled()) {
+            // CTS trigger haptic still depends on the shared status receiver.
+            ensureOverviewReceiverFromEdgeBackHandler(edgeBackGestureHandler);
             detachBackInputMonitorForDisabledAospRestoration(edgeBackGestureHandler);
             return;
         }
@@ -7286,6 +7290,8 @@ public abstract class SystemUiHookRuntime extends SystemUiInputRuntime {
             return;
         }
         if (!isAospBackGestureRestorationEnabled()) {
+            // Keep the CTS haptic/status receiver alive even while AOSP restoration is off.
+            ensureOverviewReceiverFromEdgeBackHandler(edgeBackGestureHandler);
             detachBackInputMonitorForDisabledAospRestoration(edgeBackGestureHandler);
             return;
         }
@@ -7305,6 +7311,20 @@ public abstract class SystemUiHookRuntime extends SystemUiInputRuntime {
         } catch (Throwable throwable) {
             moduleLog(Log.WARN, TAG, "Failed to restore back input from handler"
                     + ", reason=" + reason, throwable);
+        }
+    }
+
+    protected void ensureOverviewReceiverFromEdgeBackHandler(Object edgeBackGestureHandler) {
+        if (edgeBackGestureHandler == null) {
+            return;
+        }
+        try {
+            Context context = (Context) readField(edgeBackGestureHandler, "mContext");
+            ensureMiuiOverviewStateReceiver(context);
+        } catch (Throwable throwable) {
+            moduleLog(Log.WARN, TAG,
+                    "Failed to ensure CTS/status receiver while AOSP restoration is off",
+                    throwable);
         }
     }
 

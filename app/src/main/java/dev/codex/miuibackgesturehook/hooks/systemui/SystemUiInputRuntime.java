@@ -448,7 +448,11 @@ public abstract class SystemUiInputRuntime extends HookRuntimeCore {
                 moduleLog(Log.INFO, TAG,
                         "Claimed navigation-handle long press for contextual search"
                                 + ", displayId=" + displayId);
-                invokeContextualSearchService();
+                if (invokeContextualSearchService()) {
+                    // Android 16 owns CTS from SystemUI; Android 17 native still
+                    // broadcasts MODULE_CONTEXTUAL_SEARCH_TRIGGERED after invoke.
+                    playContextualSearchHaptic(navigationView.getContext());
+                }
             } catch (Throwable throwable) {
                 moduleLog(Log.WARN, TAG,
                         "Failed to claim contextual-search long press", throwable);
@@ -630,9 +634,34 @@ public abstract class SystemUiInputRuntime extends HookRuntimeCore {
     }
 
     protected boolean isAospBackGestureRestorationEnabled() {
-        return readHyperOsBooleanPreference(
-                PredictiveBackPreferences.KEY_AOSP_BACK_GESTURE_RESTORATION,
-                PredictiveBackPreferences.DEFAULT_AOSP_BACK_GESTURE_RESTORATION);
+        // Fail open to the documented default (enabled). A transient preference
+        // read failure must not disable AOSP restoration or the CTS haptic path.
+        try {
+            SharedPreferences preferences = hyperOsIndicatorPreferences;
+            if (preferences == null) {
+                synchronized (this) {
+                    preferences = hyperOsIndicatorPreferences;
+                    if (preferences == null) {
+                        preferences = getRemotePreferences(
+                                PredictiveBackPreferences.GROUP);
+                        hyperOsIndicatorPreferences = preferences;
+                    }
+                }
+            }
+            boolean enabled = preferences.getBoolean(
+                    PredictiveBackPreferences.KEY_AOSP_BACK_GESTURE_RESTORATION,
+                    PredictiveBackPreferences.DEFAULT_AOSP_BACK_GESTURE_RESTORATION);
+            hyperOsIndicatorPreferencesFailureLogged = false;
+            return enabled;
+        } catch (Throwable throwable) {
+            if (!hyperOsIndicatorPreferencesFailureLogged) {
+                hyperOsIndicatorPreferencesFailureLogged = true;
+                moduleLog(Log.ERROR, TAG,
+                        "AOSP back-gesture restoration preference unavailable"
+                                + ", policy=failOpenToDefaultEnabled", throwable);
+            }
+            return PredictiveBackPreferences.DEFAULT_AOSP_BACK_GESTURE_RESTORATION;
+        }
     }
 
     protected boolean isHyperOsIndicatorEnabled() {
