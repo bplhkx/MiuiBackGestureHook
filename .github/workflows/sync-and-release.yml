@@ -1,8 +1,21 @@
-name: Build and release APK
+name: Sync and Release
 
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        description: What to run
+        type: choice
+        required: true
+        default: sync-and-release
+        options:
+          - sync-and-release
+          - sync-only
+          - release-only
+      upstream_ref:
+        description: Upstream git ref to sync from
+        required: false
+        default: main
       tag:
         description: Release tag (use "auto" to derive from versionName)
         required: false
@@ -12,23 +25,120 @@ on:
         type: boolean
         required: false
         default: false
+  schedule:
+    # Weekly Monday 03:17 UTC
+    - cron: "17 3 * * 1"
   push:
     branches:
       - main
     paths-ignore:
       - "**.md"
       - "patches/**"
-      - ".github/workflows/sync-upstream.yml"
 
 permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: sync-and-release-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  UPSTREAM_REPO: wxxsfxyzm/MiuiBackGestureHook
+  FEATURE_BRANCH: feature/individual-feature-switches
+  PATCH_FILE: patches/aosp-gesture-restoration-switch.patch
+
 jobs:
+  sync:
+    name: Sync upstream
+    if: >
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' &&
+        (github.event.inputs.mode == 'sync-and-release' ||
+         github.event.inputs.mode == 'sync-only'))
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.detect.outputs.changed }}
+      upstream_sha: ${{ steps.detect.outputs.upstream_sha }}
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream "https://github.com/${UPSTREAM_REPO}.git" || true
+          git fetch upstream --tags --force
+          git fetch origin --tags --force
+
+      - name: Detect upstream changes
+        id: detect
+        run: |
+          REF="${{ github.event.inputs.upstream_ref || 'main' }}"
+          UPSTREAM_SHA="$(git rev-parse "upstream/${REF}")"
+          echo "upstream_sha=${UPSTREAM_SHA}" >> "$GITHUB_OUTPUT"
+          echo "Upstream ${REF} @ ${UPSTREAM_SHA}"
+          if git merge-base --is-ancestor "$UPSTREAM_SHA" HEAD; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Fork already contains upstream ${REF}."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Fork is behind upstream ${REF}."
+          fi
+
+      - name: Reset to upstream and re-apply feature patch
+        if: steps.detect.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          REF="${{ github.event.inputs.upstream_ref || 'main' }}"
+          UPSTREAM_SHA="$(git rev-parse "upstream/${REF}")"
+
+          git checkout -B main "$UPSTREAM_SHA"
+
+          if [[ -f "$PATCH_FILE" ]]; then
+            chmod +x scripts/ci/apply-feature-patch.sh
+            if ! ./scripts/ci/apply-feature-patch.sh "$PATCH_FILE"; then
+              echo "::error::Feature patch failed to apply on upstream ${REF}."
+              echo "Fix ${PATCH_FILE} against ${UPSTREAM_SHA} and re-run."
+              exit 1
+            fi
+          else
+            echo "::warning::Missing ${PATCH_FILE}; pushing pure upstream."
+          fi
+
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No tree changes after patch application."
+          else
+            git commit -m "chore: sync upstream ${REF}" \
+              -m "Upstream: ${UPSTREAM_REPO}@${UPSTREAM_SHA}" \
+              -m "Re-applied local AOSP predictive-back restoration switch patch."
+          fi
+
+          git branch -f "$FEATURE_BRANCH" main
+          git push origin main
+          git push origin "$FEATURE_BRANCH" --force
+
   build-release:
+    name: Build and release APK
+    needs: [sync]
+    if: >
+      always() && (
+        github.event_name == 'push' ||
+        (github.event_name == 'workflow_dispatch' &&
+          (github.event.inputs.mode == 'release-only' ||
+           (github.event.inputs.mode == 'sync-and-release' &&
+            (needs.sync.result == 'success' || needs.sync.result == 'skipped')))) ||
+        (github.event_name == 'schedule' &&
+          needs.sync.result == 'success' &&
+          needs.sync.outputs.changed == 'true')
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -162,6 +272,7 @@ jobs:
           - Local feature: independent AOSP predictive-back restoration switch
             - Google Circle to Search can be enabled without the AOSP path
             - HyperOS extras require the AOSP switch
+            - Circle to Search trigger haptic stays independent of the AOSP switch
 
           ### APK
           \`${APK##*/}\`
