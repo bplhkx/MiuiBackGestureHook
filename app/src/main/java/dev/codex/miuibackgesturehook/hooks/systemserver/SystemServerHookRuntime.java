@@ -572,6 +572,13 @@ public abstract class SystemServerHookRuntime extends MiuiHomeHookRuntime {
                     }
                 }
             }
+            boolean aospRestorationEnabled = preferences.getBoolean(
+                    PredictiveBackPreferences.KEY_AOSP_BACK_GESTURE_RESTORATION,
+                    PredictiveBackPreferences.DEFAULT_AOSP_BACK_GESTURE_RESTORATION);
+            if (!aospRestorationEnabled) {
+                predictiveBackPreferencesFailureLogged = false;
+                return false;
+            }
             Set<String> packages = preferences.getStringSet(
                     PredictiveBackPreferences.KEY_PACKAGES,
                     Collections.emptySet());

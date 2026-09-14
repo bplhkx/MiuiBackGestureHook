@@ -629,34 +629,45 @@ public abstract class SystemUiInputRuntime extends HookRuntimeCore {
         }
     }
 
-    protected boolean isHyperOsIndicatorEnabled() {
+    protected boolean isAospBackGestureRestorationEnabled() {
         return readHyperOsBooleanPreference(
+                PredictiveBackPreferences.KEY_AOSP_BACK_GESTURE_RESTORATION,
+                PredictiveBackPreferences.DEFAULT_AOSP_BACK_GESTURE_RESTORATION);
+    }
+
+    protected boolean isHyperOsIndicatorEnabled() {
+        return isAospBackGestureRestorationEnabled()
+                && readHyperOsBooleanPreference(
                 PredictiveBackPreferences.KEY_HYPEROS_INDICATOR,
                 PredictiveBackPreferences.DEFAULT_HYPEROS_INDICATOR);
     }
 
     protected boolean isHyperOsHapticsEnabled() {
-        return readHyperOsBooleanPreference(
+        return isAospBackGestureRestorationEnabled()
+                && readHyperOsBooleanPreference(
                 PredictiveBackPreferences.KEY_HYPEROS_HAPTICS,
                 PredictiveBackPreferences.DEFAULT_HYPEROS_HAPTICS);
     }
 
     protected boolean isHyperOsHapticsEnhancedEnabled() {
-        return readHyperOsBooleanPreference(
+        return isAospBackGestureRestorationEnabled()
+                && readHyperOsBooleanPreference(
                 PredictiveBackPreferences.KEY_HYPEROS_HAPTICS_ENHANCED,
                 PredictiveBackPreferences.DEFAULT_HYPEROS_HAPTICS_ENHANCED);
     }
 
     @Override
     protected boolean isHyperOsSlideAnimationEnabled() {
-        return readHyperOsBooleanPreference(
+        return isAospBackGestureRestorationEnabled()
+                && readHyperOsBooleanPreference(
                 PredictiveBackPreferences.KEY_HYPEROS_SLIDE_ANIMATION,
                 PredictiveBackPreferences.DEFAULT_HYPEROS_SLIDE_ANIMATION);
     }
 
     @Override
     protected boolean isOneUiCrossTaskAnimationEnabled() {
-        return readHyperOsBooleanPreference(
+        return isAospBackGestureRestorationEnabled()
+                && readHyperOsBooleanPreference(
                 PredictiveBackPreferences.KEY_ONEUI_CROSS_TASK_ANIMATION,
                 PredictiveBackPreferences.DEFAULT_ONEUI_CROSS_TASK_ANIMATION);
     }

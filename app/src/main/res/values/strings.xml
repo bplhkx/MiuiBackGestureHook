@@ -2,6 +2,11 @@
     <string name="app_name" translatable="false">Miui Back Gesture Hook</string>
     <string name="module_description" translatable="false">Hooks Xiaomi back gesture behavior with LSPosed API 102.</string>
     <string name="predictive_back_title">Back gesture management</string>
+    <string name="aosp_gesture_restoration_title">AOSP predictive back</string>
+    <string name="aosp_gesture_restoration_summary">Restore the AOSP edge-gesture and predictive-back pipeline. Turn this off to keep Xiaomi’s stock gestures while still using optional features such as Google Circle to Search.</string>
+    <string name="aosp_gesture_restoration_disabled_hyperos_summary">Requires AOSP predictive back</string>
+    <string name="feature_switches_title">Feature switches</string>
+    <string name="feature_switches_summary">Each optional integration can be enabled on its own</string>
     <string name="predictive_back_apps_title">Choose apps</string>
     <string name="predictive_back_apps_entry_title">App selection</string>
     <string name="predictive_back_apps_entry_summary">Choose apps that should use the complete predictive-back protocol</string>
@@ -82,7 +87,7 @@
     <string name="contextual_search_haptics_title">Vibrate when Circle to Search is triggered</string>
     <string name="contextual_search_haptics_summary">Vibrate after Circle to Search opens successfully.</string>
     <string name="contextual_search_entry_title">Google Circle to Search</string>
-    <string name="contextual_search_entry_summary">Configure Circle to Search and optional Google App screen actions</string>
+    <string name="contextual_search_entry_summary">Enable Circle to Search on its own, with optional Google App screen actions</string>
     <string name="gesture_trigger_title">Side trigger area</string>
     <string name="gesture_trigger_entry_title">Side trigger area</string>
     <string name="gesture_trigger_entry_summary">Adjust the height and vertical position of both side trigger areas</string>

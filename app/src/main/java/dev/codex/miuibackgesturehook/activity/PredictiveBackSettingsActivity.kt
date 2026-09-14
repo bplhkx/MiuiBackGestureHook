@@ -515,6 +515,12 @@ private fun PredictiveBackSettingsScreen(
     var configurationLoading by remember { mutableStateOf(true) }
     var configurationError by remember { mutableStateOf<String?>(null) }
     var saveError by remember { mutableStateOf<String?>(null) }
+    var aospBackGestureRestoration by remember {
+        mutableStateOf(PredictiveBackPreferences.DEFAULT_AOSP_BACK_GESTURE_RESTORATION)
+    }
+    var confirmedAospBackGestureRestoration by remember {
+        mutableStateOf(PredictiveBackPreferences.DEFAULT_AOSP_BACK_GESTURE_RESTORATION)
+    }
     var hyperOsIndicator by remember { mutableStateOf(false) }
     var confirmedHyperOsIndicator by remember { mutableStateOf(false) }
     var hyperOsHaptics by remember { mutableStateOf(false) }
@@ -540,6 +546,10 @@ private fun PredictiveBackSettingsScreen(
         preferences = null
         configurationError = null
         saveError = null
+        aospBackGestureRestoration =
+            PredictiveBackPreferences.DEFAULT_AOSP_BACK_GESTURE_RESTORATION
+        confirmedAospBackGestureRestoration =
+            PredictiveBackPreferences.DEFAULT_AOSP_BACK_GESTURE_RESTORATION
         hyperOsIndicator = false
         confirmedHyperOsIndicator = false
         hyperOsHaptics = false
@@ -590,6 +600,10 @@ private fun PredictiveBackSettingsScreen(
                 }
                 val flags = booleanArrayOf(
                     remotePreferences.getBoolean(
+                        PredictiveBackPreferences.KEY_AOSP_BACK_GESTURE_RESTORATION,
+                        PredictiveBackPreferences.DEFAULT_AOSP_BACK_GESTURE_RESTORATION,
+                    ),
+                    remotePreferences.getBoolean(
                         PredictiveBackPreferences.KEY_HYPEROS_INDICATOR,
                         PredictiveBackPreferences.DEFAULT_HYPEROS_INDICATOR,
                     ),
@@ -614,18 +628,20 @@ private fun PredictiveBackSettingsScreen(
                 remotePreferences to flags
             }
             preferences = loaded.first
-            hyperOsIndicator = loaded.second[0]
-            confirmedHyperOsIndicator = loaded.second[0]
-            hyperOsHaptics = loaded.second[1]
-            confirmedHyperOsHaptics = loaded.second[1]
-            hyperOsHapticsEnhanced = loaded.second[2]
-            confirmedHyperOsHapticsEnhanced = loaded.second[2]
-            hyperOsSlideAnimation = loaded.second[3]
-            confirmedHyperOsSlideAnimation = loaded.second[3]
-            oneUiCrossTaskAnimation = loaded.second[4]
-            confirmedOneUiCrossTaskAnimation = loaded.second[4]
-            moduleLogging = loaded.second[5]
-            confirmedModuleLogging = loaded.second[5]
+            aospBackGestureRestoration = loaded.second[0]
+            confirmedAospBackGestureRestoration = loaded.second[0]
+            hyperOsIndicator = loaded.second[1]
+            confirmedHyperOsIndicator = loaded.second[1]
+            hyperOsHaptics = loaded.second[2]
+            confirmedHyperOsHaptics = loaded.second[2]
+            hyperOsHapticsEnhanced = loaded.second[3]
+            confirmedHyperOsHapticsEnhanced = loaded.second[3]
+            hyperOsSlideAnimation = loaded.second[4]
+            confirmedHyperOsSlideAnimation = loaded.second[4]
+            oneUiCrossTaskAnimation = loaded.second[5]
+            confirmedOneUiCrossTaskAnimation = loaded.second[5]
+            moduleLogging = loaded.second[6]
+            confirmedModuleLogging = loaded.second[6]
         } catch (_: Throwable) {
             configurationError = configurationErrorMessage
         } finally {
@@ -680,6 +696,15 @@ private fun PredictiveBackSettingsScreen(
                 }
             }
         }
+    }
+    val persistAospBackGestureRestoration: (Boolean) -> Unit = { requestedEnabled ->
+        persistBooleanPreference(
+            PredictiveBackPreferences.KEY_AOSP_BACK_GESTURE_RESTORATION,
+            requestedEnabled,
+            { aospBackGestureRestoration = it },
+            { confirmedAospBackGestureRestoration },
+            { confirmedAospBackGestureRestoration = it },
+        )
     }
     val persistHyperOsIndicator: (Boolean) -> Unit = { requestedEnabled ->
         persistBooleanPreference(
@@ -810,8 +835,19 @@ private fun PredictiveBackSettingsScreen(
                         .padding(bottom = 8.dp),
                 )
             }
+            item(key = "aosp_back_gesture_restoration") {
+                AospBackGestureRestorationCard(
+                    aospBackGestureRestoration = aospBackGestureRestoration,
+                    configurationEnabled = configurationEnabled,
+                    onToggle = persistAospBackGestureRestoration,
+                    modifier = Modifier
+                        .padding(horizontal = 12.dp)
+                        .padding(bottom = 8.dp),
+                )
+            }
             item(key = "hyperos_switches") {
                 HyperOsSwitchGroupCard(
+                    aospBackGestureRestoration = aospBackGestureRestoration,
                     hyperOsIndicator = hyperOsIndicator,
                     hyperOsHaptics = hyperOsHaptics,
                     hyperOsHapticsEnhanced = hyperOsHapticsEnhanced,
@@ -909,7 +945,29 @@ private fun cardAccentColor(severity: SettingsCardSeverity): Color = when (sever
 }
 
 @Composable
+private fun AospBackGestureRestorationCard(
+    aospBackGestureRestoration: Boolean,
+    configurationEnabled: Boolean,
+    onToggle: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        insideMargin = PaddingValues(0.dp),
+    ) {
+        SwitchPreference(
+            title = stringResource(R.string.aosp_gesture_restoration_title),
+            summary = stringResource(R.string.aosp_gesture_restoration_summary),
+            checked = aospBackGestureRestoration,
+            enabled = configurationEnabled,
+            onCheckedChange = onToggle,
+        )
+    }
+}
+
+@Composable
 private fun HyperOsSwitchGroupCard(
+    aospBackGestureRestoration: Boolean,
     hyperOsIndicator: Boolean,
     hyperOsHaptics: Boolean,
     hyperOsHapticsEnhanced: Boolean,
@@ -947,7 +1005,7 @@ private fun HyperOsSwitchGroupCard(
                     R.string.back_indicator_style_aosp_summary
                 },
             ),
-            enabled = configurationEnabled,
+            enabled = configurationEnabled && aospBackGestureRestoration,
             onSelectedIndexChange = { selectedIndex ->
                 onHyperOsIndicatorToggle(selectedIndex == 1)
             },
@@ -972,7 +1030,7 @@ private fun HyperOsSwitchGroupCard(
                     R.string.haptic_feedback_effect_aosp_summary
                 },
             ),
-            enabled = configurationEnabled,
+            enabled = configurationEnabled && aospBackGestureRestoration,
             onSelectedIndexChange = { selectedIndex ->
                 onHyperOsHapticsToggle(selectedIndex == 1)
             },
@@ -980,28 +1038,42 @@ private fun HyperOsSwitchGroupCard(
         SwitchPreference(
             title = stringResource(R.string.hyperos_haptics_enhanced_title),
             summary = stringResource(
-                if (configurationEnabled && !hyperOsHaptics) {
+                if (!aospBackGestureRestoration) {
+                    R.string.aosp_gesture_restoration_disabled_hyperos_summary
+                } else if (configurationEnabled && !hyperOsHaptics) {
                     R.string.hyperos_haptics_enhanced_disabled_summary
                 } else {
                     R.string.hyperos_haptics_enhanced_summary
                 },
             ),
             checked = hyperOsHapticsEnhanced,
-            enabled = configurationEnabled && hyperOsHaptics,
+            enabled = configurationEnabled && aospBackGestureRestoration && hyperOsHaptics,
             onCheckedChange = onHyperOsHapticsEnhancedToggle,
         )
         SwitchPreference(
             title = stringResource(R.string.hyperos_slide_animation_title),
-            summary = stringResource(R.string.hyperos_slide_animation_summary),
+            summary = stringResource(
+                if (!aospBackGestureRestoration) {
+                    R.string.aosp_gesture_restoration_disabled_hyperos_summary
+                } else {
+                    R.string.hyperos_slide_animation_summary
+                },
+            ),
             checked = hyperOsSlideAnimation,
-            enabled = configurationEnabled,
+            enabled = configurationEnabled && aospBackGestureRestoration,
             onCheckedChange = onHyperOsSlideAnimationToggle,
         )
         SwitchPreference(
             title = stringResource(R.string.oneui_cross_task_animation_title),
-            summary = stringResource(R.string.oneui_cross_task_animation_summary),
+            summary = stringResource(
+                if (!aospBackGestureRestoration) {
+                    R.string.aosp_gesture_restoration_disabled_hyperos_summary
+                } else {
+                    R.string.oneui_cross_task_animation_summary
+                },
+            ),
             checked = oneUiCrossTaskAnimation,
-            enabled = configurationEnabled,
+            enabled = configurationEnabled && aospBackGestureRestoration,
             onCheckedChange = onOneUiCrossTaskAnimationToggle,
         )
     }

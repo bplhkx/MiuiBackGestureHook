@@ -3,6 +3,13 @@ package dev.codex.miuibackgesturehook;
 public final class PredictiveBackPreferences {
     public static final String GROUP = "predictive_back_opt_in";
     public static final String KEY_PACKAGES = "packages";
+    /**
+     * Master switch for restoring the AOSP predictive-back / edge-gesture path.
+     * Optional features such as Circle to Search remain independently controllable.
+     */
+    public static final String KEY_AOSP_BACK_GESTURE_RESTORATION =
+            "aosp_back_gesture_restoration";
+    public static final boolean DEFAULT_AOSP_BACK_GESTURE_RESTORATION = true;
     public static final String KEY_HYPEROS_INDICATOR = "hyperos_indicator_style";
     public static final boolean DEFAULT_HYPEROS_INDICATOR = false;
     public static final String KEY_HYPEROS_HAPTICS = "hyperos_indicator_haptics";

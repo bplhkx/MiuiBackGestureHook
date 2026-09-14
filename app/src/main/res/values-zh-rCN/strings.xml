@@ -1,5 +1,10 @@
 <resources>
     <string name="predictive_back_title">返回手势管理</string>
+    <string name="aosp_gesture_restoration_title">AOSP 预测性返回</string>
+    <string name="aosp_gesture_restoration_summary">恢复 AOSP 侧滑手势与预测性返回链路。关闭后保留小米原生手势，仍可单独启用 Google 圈定即搜等可选功能。</string>
+    <string name="aosp_gesture_restoration_disabled_hyperos_summary">依赖 AOSP 预测性返回</string>
+    <string name="feature_switches_title">功能开关</string>
+    <string name="feature_switches_summary">每个可选集成均可单独启用</string>
     <string name="predictive_back_apps_title">选择应用</string>
     <string name="predictive_back_apps_entry_title">应用列表</string>
     <string name="predictive_back_apps_entry_summary">选择需要启用完整预测性返回协议的应用</string>
@@ -80,7 +85,7 @@
     <string name="contextual_search_haptics_title">圈定即搜触发时震动</string>
     <string name="contextual_search_haptics_summary">圈定即搜成功打开后播放震动。</string>
     <string name="contextual_search_entry_title">Google 圈定即搜</string>
-    <string name="contextual_search_entry_summary">配置圈定即搜及 Google 应用内的可选屏幕操作</string>
+    <string name="contextual_search_entry_summary">可单独启用圈定即搜，并配置 Google 应用内的可选屏幕操作</string>
     <string name="gesture_trigger_title">两侧触发区域</string>
     <string name="gesture_trigger_entry_title">两侧触发区域</string>
     <string name="gesture_trigger_entry_summary">调整左右两侧触发区域的高度和垂直位置</string>

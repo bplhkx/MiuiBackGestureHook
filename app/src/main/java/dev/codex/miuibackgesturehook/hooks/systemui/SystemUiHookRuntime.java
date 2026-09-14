@@ -72,6 +72,30 @@ public abstract class SystemUiHookRuntime extends SystemUiInputRuntime {
     private volatile SharedPreferences contextualSearchStatePreferences;
     private volatile Context contextualSearchStateContext;
     private final SharedPreferences.OnSharedPreferenceChangeListener
+            aospRestorationPreferenceListener = (preferences, key) -> {
+                if (!PredictiveBackPreferences.KEY_AOSP_BACK_GESTURE_RESTORATION
+                        .equals(key)) {
+                    return;
+                }
+                Context context = contextualSearchStateContext;
+                if (context == null) {
+                    return;
+                }
+                Handler mainHandler = new Handler(context.getMainLooper());
+                mainHandler.post(() -> {
+                    if (contextualSearchStateContext != context) {
+                        return;
+                    }
+                    if (!isAospBackGestureRestorationEnabled()) {
+                        detachAllBackInputMonitorsForDisabledAospRestoration(context);
+                        return;
+                    }
+                    publishSystemUiInputArbiterState(context,
+                            systemUiInputArbiterMonitorCount.get() > 0,
+                            "aospBackGestureRestorationPreference:" + key);
+                });
+            };
+    private final SharedPreferences.OnSharedPreferenceChangeListener
             contextualSearchStatePreferenceListener = (preferences, key) -> {
                 if (!PredictiveBackPreferences.KEY_CONTEXTUAL_SEARCH_LONG_PRESS
                         .equals(key)) {
@@ -198,6 +222,8 @@ public abstract class SystemUiHookRuntime extends SystemUiInputRuntime {
                     PredictiveBackPreferences.GROUP);
             preferences.registerOnSharedPreferenceChangeListener(
                     contextualSearchStatePreferenceListener);
+            preferences.registerOnSharedPreferenceChangeListener(
+                    aospRestorationPreferenceListener);
             contextualSearchPreferences = preferences;
             contextualSearchStatePreferences = preferences;
             contextualSearchStateContext = context.getApplicationContext();
@@ -221,6 +247,8 @@ public abstract class SystemUiHookRuntime extends SystemUiInputRuntime {
         try {
             preferences.unregisterOnSharedPreferenceChangeListener(
                     contextualSearchStatePreferenceListener);
+            preferences.unregisterOnSharedPreferenceChangeListener(
+                    aospRestorationPreferenceListener);
         } catch (Throwable throwable) {
             moduleLog(Log.WARN, TAG,
                     "Failed to unregister live contextual-search preference listener",
@@ -7196,6 +7224,10 @@ public abstract class SystemUiHookRuntime extends SystemUiInputRuntime {
         if (!acceptingBackInputInstalls) {
             return;
         }
+        if (!isAospBackGestureRestorationEnabled()) {
+            detachBackInputMonitorForDisabledAospRestoration(edgeBackGestureHandler);
+            return;
+        }
         try {
             if (edgeBackGestureHandler == null || backAnimationImpl == null) {
                 return;
@@ -7253,6 +7285,10 @@ public abstract class SystemUiHookRuntime extends SystemUiInputRuntime {
         if (!acceptingBackInputInstalls || edgeBackGestureHandler == null) {
             return;
         }
+        if (!isAospBackGestureRestorationEnabled()) {
+            detachBackInputMonitorForDisabledAospRestoration(edgeBackGestureHandler);
+            return;
+        }
         try {
             if (nativeInputMonitors.containsKey(edgeBackGestureHandler)) {
                 return;
@@ -7269,6 +7305,58 @@ public abstract class SystemUiHookRuntime extends SystemUiInputRuntime {
         } catch (Throwable throwable) {
             moduleLog(Log.WARN, TAG, "Failed to restore back input from handler"
                     + ", reason=" + reason, throwable);
+        }
+    }
+
+    protected void detachBackInputMonitorForDisabledAospRestoration(
+            Object edgeBackGestureHandler) {
+        Context context = null;
+        try {
+            if (edgeBackGestureHandler != null) {
+                context = (Context) readField(edgeBackGestureHandler, "mContext");
+            }
+        } catch (Throwable ignored) {
+            // Keep detaching even when the handler context cannot be read.
+        }
+        boolean detached = false;
+        synchronized (backInputLifecycleLock) {
+            NativeBackInputMonitor existing = edgeBackGestureHandler == null
+                    ? null
+                    : nativeInputMonitors.remove(edgeBackGestureHandler);
+            if (existing != null) {
+                try {
+                    existing.detach();
+                    detached = true;
+                } catch (Throwable throwable) {
+                    moduleLog(Log.WARN, TAG,
+                            "Failed to detach back input monitor after AOSP restoration"
+                                    + " was disabled", throwable);
+                }
+            }
+        }
+        if (detached) {
+            moduleLog(Log.INFO, TAG,
+                    "Detached back input monitor because AOSP restoration is disabled");
+        }
+        if (context != null) {
+            publishSystemUiInputArbiterState(context,
+                    systemUiInputArbiterMonitorCount.get() > 0,
+                    "aospBackGestureRestoration:disabled");
+        }
+    }
+
+    protected void detachAllBackInputMonitorsForDisabledAospRestoration(Context context) {
+        List<Object> handlers = new ArrayList<>();
+        synchronized (backInputLifecycleLock) {
+            handlers.addAll(nativeInputMonitors.keySet());
+        }
+        for (Object handler : handlers) {
+            detachBackInputMonitorForDisabledAospRestoration(handler);
+        }
+        if (context != null) {
+            publishSystemUiInputArbiterState(context,
+                    systemUiInputArbiterMonitorCount.get() > 0,
+                    "aospBackGestureRestoration:disabledAll");
         }
     }
 
