@@ -1,4 +1,4 @@
-添加独立AOSP手势恢复开关
+# fork说明：添加独立AOSP手势恢复开关
 # MIUI Back Gesture Hook
 
 An LSPosed module for researching Xiaomi MIUI/HyperOS back gestures.
